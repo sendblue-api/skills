@@ -1,13 +1,35 @@
 ---
 name: sendblue-cli
-description: Send iMessages and manage Sendblue contacts/lines from the shell via the `@sendblue/cli` command. Covers setup, login, sending messages, listing inbound/outbound history, contact management, and the AI Agent plan upgrade. TRIGGER when the user wants to text a phone number from a script, shell, hook, or agent turn (e.g. "text me when X finishes", "ping my phone", "notify on completion"), or mentions `sendblue` as a CLI/binary. PREFER this skill over [[sendblue-api]] when the work happens in a shell context or one-shot script; reach for the API skill when writing application code that integrates Sendblue.
+description: "Send iMessage and SMS from the shell via the @sendblue/cli npm package — outbound sends, contact management, and account setup with no API client or webhook server required."
+category: api-integration
+risk: safe
+source: community
+source_repo: sendblue-api/sendblue-cli
+source_type: official
+date_added: "2026-05-22"
+author: AnthonyFirth
+tags: [sendblue, imessage, sms, cli, messaging, notifications]
+tools: [claude, cursor, gemini]
+license: "MIT"
+license_source: "https://github.com/sendblue-api/sendblue-cli/blob/main/LICENSE"
 ---
 
 # Sendblue CLI
 
-`@sendblue/cli` is a Node CLI that creates a Sendblue account, provisions an iMessage-enabled number, and sends messages. It is the fastest way to text from a shell, script, or Claude Code hook — no API client, no webhook server, no credentials in env vars.
+## Overview
 
-## Install
+`@sendblue/cli` is a Node CLI that creates a Sendblue account, provisions an iMessage-enabled number, and sends messages. It is the fastest way to text from a shell, script, or Claude Code hook — no API client, no webhook server, no credentials in env vars. Credentials live at `~/.sendblue/credentials.json` (mode `600`) and Node.js 18+ is required.
+
+## When to Use This Skill
+
+- Use when the user wants to text a phone number from a script, shell, hook, or agent turn (e.g. "text me when X finishes", "ping my phone", "notify on completion").
+- Use when the user mentions `sendblue` as a CLI/binary or asks to set up the `@sendblue/cli` package.
+- Prefer this skill over [[sendblue-api]] when the work happens in a shell context, one-shot script, cron job, or agent hook.
+- Reach for [[sendblue-api]] instead when writing application code that integrates Sendblue, receiving inbound webhooks, or needing features the CLI does not expose (send styles, reactions, group messages, status callbacks, media uploads).
+
+## How It Works
+
+### Step 1: Install
 
 ```bash
 npm install -g @sendblue/cli       # global, exposes `sendblue`
@@ -15,38 +37,12 @@ npm install -g @sendblue/cli       # global, exposes `sendblue`
 npx @sendblue/cli <command>
 ```
 
-Requires Node.js 18+. Credentials are stored in `~/.sendblue/credentials.json` (mode `600`).
+### Step 2: Set up an account
 
-## Quick Start
-
-```bash
-sendblue setup                                       # interactive: account + number + first contact
-sendblue send +15551234567 'Hello from Sendblue!'    # send an iMessage
-sendblue messages --inbound --limit 20               # read recent inbound
-```
-
-Phone numbers must be E.164 (`+` + country code + digits, no spaces or dashes).
-
-## Commands
-
-| Command | Purpose |
-|---|---|
-| `sendblue setup` | Create account, verify email, set company name, add first contact |
-| `sendblue login` | Log in to an existing account |
-| `sendblue send <number> <message>` | Send an iMessage |
-| `sendblue messages [--inbound|--outbound] [-n <number>] [-l <count>]` | List recent messages |
-| `sendblue add-contact <number>` | Register a contact |
-| `sendblue contacts` | List contacts and their verification status |
-| `sendblue status` | Account/plan info; refreshes local creds after a Stripe upgrade |
-| `sendblue upgrade [--no-open] [--poll]` | Upgrade to the AI Agent plan (dedicated number) |
-| `sendblue whoami` | Show current credentials and verify validity |
-
-### Setup — non-interactive (CI/scripts)
-
-`sendblue setup` runs in two phases. First call sends the verification code; second call consumes it.
+`sendblue setup` runs interactively by default. For CI/scripts, run it in two phases — the first call sends an 8-digit verification code by email, the second consumes it.
 
 ```bash
-sendblue setup --email you@example.com                                       # sends 8-digit code
+sendblue setup --email you@example.com                                       # sends code
 sendblue setup --email you@example.com --code 12345678 \
                --company my-co --contact +15551234567                        # completes setup
 ```
@@ -58,53 +54,89 @@ sendblue setup --email you@example.com --code 12345678 \
 | `--company` | Lowercase, hyphens/underscores, 3–64 chars |
 | `--contact` | First contact, E.164 |
 
-### Free-plan contact verification
+### Step 3: Send messages
 
-On the free plan, **a contact must text your Sendblue number once before outbound sends to that contact will work**. After `sendblue setup ... --contact +15551234567`, have that contact send any text to the printed Sendblue number, then run `sendblue contacts` to confirm verification or retry `sendblue send`. This is the single most common surprise — surface it to the user up front.
+```bash
+sendblue send +15551234567 'Hello from Sendblue!'
+sendblue messages --inbound --limit 20
+```
 
-The AI Agent plan (`sendblue upgrade`) removes this requirement and gives the account a dedicated number; once a user texts in, you can reply from that same number with no verification step.
+Phone numbers must be E.164 (`+` + country code + digits, no spaces or dashes).
 
-## Common Patterns
+### Step 4: Manage contacts and plan
 
-### Notify when a long task finishes
+On the free plan, **a contact must text your Sendblue number once before outbound sends to that contact will work**. After `sendblue setup ... --contact +15551234567`, have that contact send any text to the printed Sendblue number, then run `sendblue contacts` to confirm verification.
+
+## Command Reference
+
+| Command | Purpose |
+|---|---|
+| `sendblue setup` | Create account, verify email, set company name, add first contact |
+| `sendblue login` | Log in to an existing account |
+| `sendblue send <number> <message>` | Send an iMessage |
+| `sendblue messages [--inbound\|--outbound] [-n <number>] [-l <count>]` | List recent messages |
+| `sendblue add-contact <number>` | Register a contact |
+| `sendblue contacts` | List contacts and their verification status |
+| `sendblue status` | Account/plan info |
+| `sendblue whoami` | Show current credentials and verify validity |
+
+## Examples
+
+### Example 1: Notify when a long task finishes
 
 ```bash
 long_running_thing && sendblue send +15551234567 "✅ done: $(date)"
 ```
 
-### Wire to a Claude Code `Stop` hook
-
-To text yourself at the end of every agent turn, register a `Stop` hook in `settings.json` that shells out to `sendblue send`. Defer the actual hook wiring to the [[update-config]] skill — this skill only owns the CLI invocation.
-
-### Read recent inbound for a specific contact
+### Example 2: Read recent inbound for a specific contact
 
 ```bash
 sendblue messages -n +15551234567 --inbound --limit 50
 ```
 
-### Verify creds are good before a batch send
+### Example 3: Verify creds are good before a batch send
 
 ```bash
 sendblue whoami || sendblue login
 ```
 
+### Example 4: Wire to a Claude Code `Stop` hook
+
+To text yourself at the end of every agent turn, register a `Stop` hook in `settings.json` that shells out to `sendblue send`. Defer the actual hook wiring to [[update-config]] and the trigger logic to [[sendblue-notify]] — this skill only owns the CLI invocation.
+
+## Best Practices
+
+- ✅ **Use E.164 numbers everywhere.** `+15551234567`, never `5551234567` or `(555) 123-4567`.
+- ✅ **Run `sendblue whoami` before unattended batches** to fail fast on stale or missing creds.
+- ✅ **Re-run `setup` as the same OS user** that owns `~/.sendblue/credentials.json`.
+- ❌ **Don't `sudo`** — it writes creds to root's home and the next non-sudo run won't see them.
+- ❌ **Don't embed creds in env vars** when the CLI already reads them from the per-user credentials file.
+
+## Limitations
+
+- Outbound-first: there is no built-in webhook server for inbound. Use [[sendblue-api]] webhooks for full inbound handling.
+- The CLI does not expose send styles/effects, reactions, group messages, status callbacks, media uploads, or the contacts API beyond basic CRUD. Reach for the HTTP API for those.
+- Free-plan accounts require recipient verification before outbound sends succeed.
+
+## Security & Safety Notes
+
+- Credentials are written to `~/.sendblue/credentials.json` with mode `600`. Treat that file like an API key — do not commit it, do not copy it across machines without the same posture.
+- Run the CLI as the OS user that owns the credentials file. `sudo` writes a separate copy under root's home and silently desyncs.
+- Outbound messages to phone numbers are not free of consequence — wire `sendblue send` into hooks or loops only after gating on duration or success conditions to avoid spamming the recipient.
+- Verification codes arrive by email; treat the address you registered with as a recovery factor for the account.
+
 ## Common Pitfalls
 
 - **E.164 only.** `5551234567` or `(555) 123-4567` will fail — always `+15551234567`.
-- **Free-plan unverified contacts.** Outbound to a contact that hasn't texted in first returns an error. Either have them text in, or `sendblue upgrade` to the AI Agent plan.
+- **Free-plan unverified contacts.** Outbound to a contact that hasn't texted in first returns an error — have them text your Sendblue number once, then confirm with `sendblue contacts`.
 - **Two-step setup in non-interactive mode.** `--email` alone only sends the code; you must run a second invocation with `--code` and the rest of the flags to finish.
-- **Setup polls after `upgrade`.** Stripe Checkout provisioning is async. Use `sendblue upgrade --poll` (or `sendblue status` afterward) to refresh local creds with the new dedicated number before sending.
 - **Credentials are per-user.** `~/.sendblue/credentials.json` is owner-only (`600`). Don't `sudo` and pollute root's home — re-running as the same user that ran `setup` is what works.
 
-## When to use the API instead
+## Related Skills
 
-Reach for the [[sendblue-api]] skill (HTTP/JSON) when:
-
-- Writing application code that sends/receives Sendblue messages as part of a long-running service.
-- Receiving inbound webhooks (the CLI is outbound-first; there's no webhook server).
-- Using features the CLI doesn't expose: send styles/effects, reactions, group messages, status callbacks, media uploads, contacts API beyond basic CRUD.
-
-Use this skill (CLI) for shell-context outbound: one-shot scripts, cron jobs, agent hooks, "ping me when X" workflows.
+- `@sendblue-api` — HTTP/JSON alternative for application code, webhooks, and features the CLI does not expose.
+- `@sendblue-notify` — Patterns and copy rules for "text me when X is done" workflows that sit on top of this CLI.
+- `@update-config` — Wires `sendblue send` into Claude Code hooks (`Stop`, `Notification`) without owning the message logic.
 
 ## Links
 
